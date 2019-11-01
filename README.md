@@ -139,17 +139,40 @@ given a size of bytes to allocate it will find a node on the free list that can
 "fit" the requested number of bytes as well as the previous node. We will need a
 pointer to the previous node in order to perform the "splitting" discussed next.
 
-The basic idea is to iterate over the free list to find a block that will fit
-the requested size number of bytes. It is important to note that you must
-consider the size of the block with respect to the size of the `node_t` struct
-that takes up space and the `header_t` struct that also takes up space. That is,
-the actual size of the block on the free list is the size field of the `node_t`
-struct and the `node_t` struct itself which must be enough to accommodate size
-bytes (provided as a parameter) plus the size of `header_t`.
+The basic idea is to iterate over the free list to find a block that
+will fit the requested size number of bytes. It is important to note
+that you must consider the size of the block with respect to the size
+of the `node_t` struct that takes up space and the `header_t` struct
+that also takes up space. That is, the actual size of the block on the
+free list is the size field of the `node_t` struct (the number of
+bytes available to allocated from the free block) and the size of the
+`node_t` struct itself which must be enough to accommodate `size` in
+bytes (provided as a parameter, the number of bytes to allocate) plus
+the size of `header_t`.
 
-Once a node on the free list has been found a pointer to it must be returned
-using found (second parameter) and the previous node (if any) must be returned
-using previous (third parameter).
+That is, we are looking for a node on the free list that has a least
+the number of bytes requested (`size` parameter) available to allocate:
+
+```
++--------+---------------------------------------------+
+| node_t | # of bytes >= size parameter                |
++--------+---------------------------------------------+
+```
+
+Once a node on the free list has been found, a pointer to it must be
+returned using found (second parameter) and the previous node (if any)
+must be returned using previous (third parameter). In particular, the
+format of the allocated block looks like this with a pointer to the
+start of the allocated bytes returned in `*found`:
+
+```
++----------+---------------------------------------------+
+| header_t | # of bytes >= size parameter                |
++----------+---------------------------------------------+
+           ^
+           |
+*found ----+
+```
 
 ### `split`
 
@@ -176,14 +199,14 @@ The basic approach is this:
    original size minus the size of the requested number of bytes plus the "size
    of" `header_t`).
 
-1. Adjust the previous pointer to point to the new location of the free block -
+2. Adjust the previous pointer to point to the new location of the free block -
    this means you need to assign to the next pointer of the previous node to the
    new location of the free block. You need to pay attention to if previous is
    `NULL`. If it is, it means we are allocating from the first node in the free
    list which means we need to assign `head` (the pointer to the start of the
    free list) to the new free block.
 
-1. Lastly, using the pointer you saved to the original free block in step 1 you
+3. Lastly, using the pointer you saved to the original free block in step 1 you
    must overlay/embed a `header_t` to the start of this piece of memory. This is
    easy, you simply assign to `*allocated` the pointer to the start of the
    original free block (performing the proper cast). After you do that, update
